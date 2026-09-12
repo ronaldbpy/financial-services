@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "_comentario": "Borra los que no uses. Las claves van por variable de entorno, nunca escritas aca.",
+
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+      "env": { "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}" }
+    }
+  }
+}

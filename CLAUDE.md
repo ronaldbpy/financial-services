@@ -1,50 +1,44 @@
-# Financial Services Plugins
+# Claude for Financial Services
 
-Cowork plugins and Claude Managed Agent templates for financial services. Each named agent ships two ways from one source.
+## Qué es
+Plugins y Managed Agent templates para workflows de servicios financieros (IB, equity research, PE, wealth management). Cada agente corre como plugin de Cowork o como Managed Agent via API — misma fuente, dos wrappers.
 
-## Repository Structure
+## Cómo se levanta
+```bash
+# Validar manifests antes de commitear (obligatorio)
+python3 scripts/check.py
 
-```
-├── plugins/
-│   ├── agent-plugins/               #   named agents — one self-contained plugin each
-│   │   └── <slug>/
-│   │       ├── .claude-plugin/plugin.json
-│   │       ├── agents/<slug>.md     #   ← canonical system prompt (one source, two wrappers)
-│   │       └── skills/              #   ← bundled copies, synced from vertical-plugins/
-│   ├── vertical-plugins/            #   FSI verticals — skill sources, commands, MCPs
-│   │   └── <vertical>/
-│   │       ├── .claude-plugin/plugin.json
-│   │       ├── commands/
-│   │       ├── skills/
-│   │       └── .mcp.json
-│   └── partner-built/               #   partner plugins (LSEG, S&P Global)
-├── managed-agent-cookbooks/         # CMA cookbooks (one dir per named agent)
-│   └── <slug>/
-│       ├── agent.yaml               #   system + skills → ../../plugins/agent-plugins/<slug>/...
-│       ├── subagents/*.yaml         #   depth-1 leaf workers
-│       ├── steering-examples.json
-│       └── README.md                #   security tier + handoff notes
-├── claude-for-msft-365-install/     # admin tooling for the Microsoft 365 add-in (separate from FSI plugins)
-└── scripts/                         # deploy-managed-agent.sh, check.py, validate.py, orchestrate.py, sync-agent-skills.py
+# Deploy de un managed agent
+export ANTHROPIC_API_KEY=sk-ant-...
+scripts/deploy-managed-agent.sh <slug>   # ej: gl-reconciler
+
+# Sincronizar skills vertical-plugins → agent-plugins
+python3 scripts/sync-agent-skills.py
 ```
 
-Run `python3 scripts/check.py` before committing — it lints every manifest, verifies all `system.file` / `skills.path` / `callable_agents.manifest` references resolve, fails if any `agent-plugins/<slug>/skills/` copy has drifted from its `vertical-plugins/` source, and rejects non-ASCII bytes in a `.ps1` without a UTF-8 BOM.
+## Stack
+- Markdown + YAML (sin build step)
+- Python 3 (scripts de validación y deploy)
+- FastAPI + uvicorn + PyJWT (bootstrap Microsoft 365)
+- Claude Managed Agents API (`/v1/agents`)
 
-**Keep `.ps1` files pure ASCII.** Windows PowerShell 5.1 — still the default shell on managed Windows — decodes a BOM-less `.ps1` using the machine's ANSI code page, not UTF-8. An em dash or curly quote becomes mojibake that can contain a literal `"`, which terminates a string and makes the whole script fail to *parse*. Write `--`, not `—`. This is invisible on macOS and fatal on Windows; `check.py` gates it. **Edit skills in `vertical-plugins/`**, then run `python3 scripts/sync-agent-skills.py` to propagate into the agent bundles.
+## Estructura
+```
+plugins/agent-plugins/<slug>/     — agentes nombrados, self-contained
+plugins/vertical-plugins/<v>/     — fuentes de skills, commands, MCPs por vertical FSI
+plugins/partner-built/            — LSEG, S&P Global
+managed-agent-cookbooks/<slug>/   — agent.yaml + subagentes + steering examples
+scripts/                          — check.py, deploy-managed-agent.sh, sync-agent-skills.py
+claude-for-msft-365-install/      — admin tooling para el add-in de Microsoft 365
+```
 
-`check.py` also self-installs a `pre-commit` hook (`git config core.hooksPath .githooks` — no Husky/Node). The hook patch-bumps any plugin's `.claude-plugin/plugin.json` `version` so a branch ends up exactly one patch ahead of `main` (bumped once, not per commit — a plugin's `version` gates update delivery to already-installed users). The `version-bump` GitHub Action enforces the same rule on PRs as a backstop. Bypass a single commit with `git commit --no-verify`; bump logic lives in `scripts/version_bump.py`.
+## Reglas de este proyecto
+- Editar skills SIEMPRE en `vertical-plugins/`, luego `sync-agent-skills.py`. Nunca editar directo en `agent-plugins/<slug>/skills/` — `check.py` lo detecta como drift y falla CI.
+- Correr `python3 scripts/check.py` antes de cada commit. Valida manifests, referencias cross-file y drift de skills.
+- Archivos `.ps1` deben ser ASCII puro. Sin em dash (`—`) ni comillas tipográficas — PowerShell 5.1 en Windows los convierte a mojibake que rompe el parser. Usar `--` no `—`.
+- El campo `name` en marketplace es inmutable una vez publicado. Renombrar UI: usar `displayName`. Rename real: agregar entrada en `renames` map de `marketplace.json`.
+- Pre-commit hook (instalado por `check.py`) hace patch-bump automático de `version` en `plugin.json`. No forzar versiones manualmente.
 
-## Key Files
-
-- `marketplace.json`: Marketplace manifest - registers all plugins with source paths
-- `plugin.json`: Plugin metadata - name, description, version, and component discovery settings
-- `commands/*.md`: Slash commands invoked as `/plugin:command-name`
-- `skills/*/SKILL.md`: Detailed knowledge and workflows for specific tasks
-- `*.local.md`: User-specific configuration (gitignored)
-- `mcp-categories.json`: Canonical MCP category definitions shared across plugins
-
-## Development Workflow
-
-1. Edit markdown files directly - changes take effect immediately
-2. Test commands with `/plugin:command-name` syntax
-3. Skills are invoked automatically when their trigger conditions match
+## Cosas que ya intentamos y no funcionaron
+- Editar skills directamente en `agent-plugins/` — `check.py` falla por drift. Siempre editar en `vertical-plugins/` primero.
+- Caracteres UTF-8 (`—`, `"`, `"`) en `.ps1` — invisible en macOS, fatal en Windows.

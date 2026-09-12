@@ -1,0 +1,16 @@
+{
+  "$comentario": "Hooks opcionales. Borra este archivo si no los vas a usar.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"archivo modificado\" >> .claude/cambios.log"
+          }
+        ]
+      }
+    ]
+  }
+}
